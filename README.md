@@ -5,14 +5,36 @@ Independently selected research topic for EE 136 - Statistical Pattern Recogniti
 **Authors:** Sally Kim, Laura Kaplan, Kevin Yu
 
 ---
+
 ## Table of Contents
+- [Repository Structure](#repository-structure)
 - [Project Proposal](#project-proposal)
   - [1. Goals](#1-goals)
   - [2. Data](#2-data)
   - [3. Methods](#3-methods)
   - [4. Questions](#4-questions)
-- [Repository Structure](#repository-structure)
 - [Usage Instructions](#usage-instructions)
+  
+---
+
+## Repository Structure
+```
+Gaze_Emotion_Modeling/
+│
+├── src/
+│
+├── data/
+│ ├── original/
+│ └── processed/
+│
+├── notebooks/
+│ ├── exploratory_analysis/
+│ ├── modeling/
+│ ├── preprocessing/
+│ └── visualizing_results/
+│
+└── results/ 
+```
 ---
 
 ## Project Proposal
@@ -70,9 +92,6 @@ We hypothesize that a carefully selected non-Gaussian prior will perform better,
 - How can we intelligently pick our borders for each bin? Is there a way to determine how many bins or pick borders without a large grid search type routine?
 
 ---
-
-## Repository Structure
-*fill once we begin adding code*
 
 ## Usage Instructions
 *how to interpret our preprocessing, reproduce our experiments, and locate our results*
