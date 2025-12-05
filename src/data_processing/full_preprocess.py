@@ -1,9 +1,12 @@
+
 # Note: this calculates percentages based on each segment, not time. Segments should be good enough as a proxy
 
 import numpy as np
 import pickle
 import pandas as pd
 from collections import defaultdict
+from sklearn.model_selection import train_test_split
+
 
 with open('velo.pkl', "rb") as f:
     raw_velo = pickle.load(f)
@@ -17,10 +20,10 @@ LINEAR_SPLIT = True
 
 # If we look at the global max instead of each person's max
 VELO_USE_GLOBAL_STATS = True
-BLINK_USE_GLOBAL_STATS = True
+BLINK_USE_GLOBAL_STATS = False
 
-VELO_SPLIT_COUNT = 6
-BLINK_SPLIT_COUNT = 3
+VELO_SPLIT_COUNT = 9
+BLINK_SPLIT_COUNT = 6
 
 # You can get rid of the biggest outliers when doing the splits (does NOT remove the data)
 VELO_TOP_CUTOFF = 95
@@ -173,8 +176,25 @@ def create_array(cutoffs_velo, cutoffs_blink, raw_velo) :
                 row[f"Velo_s{i}"] = row[f"Velo_s{i}"]/total_time
             df.loc[len(df)] = row
 
+    with open('post_emotions_normalized', "rb") as f:
+        emotions = pickle.load(f)
+
     df.to_csv("./featurized.csv", index = False)
+
+    
+    trial_no_to_code = {0 : "BNS", 1: "BRZ", 2: "DST", 3: "EXR", 4: "JNG", 5: "PRS", 6: "BOT", 7: "RFS", 8: "RPW", 9: "RST", 10: "TNT", 11: "ZMZ"}
+
+    full_data = pd.merge(df, emotions, on=['ID', 'Str_Code'], how='inner')
+
+    train, test = train_test_split(full_data, test_size=0.2, random_state=42)
+
+    train.to_csv("../../data/processed/train.csv", index = False)
+    test.to_csv("../../data/processed/test.csv", index = False)
 
 cutoffs_velo = get_velo_cutoffs(raw_velo)
 cutoffs_blink = get_blink_cutoffs(raw_velo)
 create_array(cutoffs_velo, cutoffs_blink, raw_velo)
+
+
+
+

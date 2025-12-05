@@ -94,37 +94,54 @@ def calc_score(X, y, w, beta = 1.0) :
     return np.sum(total_log_proba) / N
 
 # Evidence maximization algorithm
-def get_alpha_beta_evidence(X, y, alpha_grid = [0.1,0.5,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70], beta_grid = [0.1,0.5,1,5,10,15,20,25,30,35,40,45,50]) :
+def get_alpha_beta_evidence(emotion,
+                            alpha_grid = [10,15,20,25,30,35,40,45,50,55,60,65,70, 65, 80, 85, 90, 95, 100, 105], 
+                            beta_grid = [0.1,0.5,1,5,10,15,20,25,30,35],
+                            degree_grid = [1,2,3]) :
+    
+
 
     best_alpha = 0
     best_beta = 0
     best_evidence = -np.finfo(np.float32).max
-    for a in alpha_grid :
-        for b in beta_grid :
-            evidence = calc_log_evidence(X, y, a, b)
-            if evidence > best_evidence :
-                best_alpha = a
-                best_beta = b
-                best_evidence = evidence
+    best_degree = 0
+    interactions = False
+    for d in degree_grid :
+        for interaction in [True, False] :
+            X, y, X_test, Y_test = get_train_test_data(emotion, d, interaction)
+
+            for a in alpha_grid :
+                for b in beta_grid :
+                    evidence = calc_log_evidence(X, y, a, b)
+                    if evidence > best_evidence :
+                        best_alpha = a
+                        best_beta = b
+                        best_evidence = evidence
+                        best_degree = d
+                        interactions = interaction
 
     print(f"Best alpha: {best_alpha}")
     print(f"Best beta: {best_beta}")
+    print(f"Best degree: {best_degree}")
+    print(f"Interactions: {interactions}")
     print(f"Evidence: {best_evidence}")
-    return best_alpha, best_beta
+    return best_alpha, best_beta, best_degree, interactions
 
 
 # Parameters for the param transform
-interactions = False
-degree = 2
 
 # Test all emotions
+total_improvement = 0
+total_ratio = 0
+
 for emotion in ["Joy","Happiness","Calmness","Relaxation","Anger","Disgust","Fear","Anxiousness","Sadness"] :
     print(f"Emotion: {emotion}")
 
+    # get best alpha and beta by evidence 
+    alpha, beta, degree, interactions = get_alpha_beta_evidence(emotion)
+
     X_train, Y_train, X_test, Y_test = get_train_test_data(emotion, degree, interactions)
 
-    # get best alpha and beta by evidence 
-    alpha, beta = get_alpha_beta_evidence(X_train, Y_train)
 
     # train model
     w_map = bayesian_linear_regression(X_train, Y_train, alpha, beta)
@@ -135,3 +152,9 @@ for emotion in ["Joy","Happiness","Calmness","Relaxation","Anger","Disgust","Fea
     print(f"MAP score: {calc_score(X_test, Y_test, w_map, beta)}")
     print("----------------------------------")
     print()
+
+    total_improvement += calc_score(X_test, Y_test, w_map, beta) - calc_score_baseline(X_test, Y_test, np.mean(Y_train), beta)
+    total_ratio += calc_score(X_test, Y_test, w_map, beta) / calc_score_baseline(X_test, Y_test, np.mean(Y_train), beta)
+
+print(f"Average Improvement (Linear): {total_improvement/9}")
+print(f"Average Ratio: {total_ratio/9}")
