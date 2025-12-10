@@ -71,7 +71,7 @@ def calc_log_evidence(X, y, alpha, beta):
     return avg_log_proba
 
 # Takes one mean for all predictions
-def calc_score_baseline(X, y, mean, beta = 1.0) :
+def calc_score_baseline(X, y, mean, beta = 10) :
 
     # Predict
     N, M = X.shape
@@ -82,7 +82,7 @@ def calc_score_baseline(X, y, mean, beta = 1.0) :
     return np.sum(total_log_proba) / N
 
 
-def calc_score(X, y, w, beta = 1.0) :
+def calc_score(X, y, w, beta = 10) :
 
     # Predict
     N, M = X.shape
@@ -128,16 +128,8 @@ def get_alpha_beta_evidence(emotion,
     return best_alpha, best_beta, best_degree, interactions
 
 
-# Parameters for the param transform
-
-# Test all emotions
-total_improvement = 0
-total_ratio = 0
-
-for emotion in ["Joy","Happiness","Calmness","Relaxation","Anger","Disgust","Fear","Anxiousness","Sadness"] :
-    print(f"Emotion: {emotion}")
-
-    # get best alpha and beta by evidence 
+def run_map_for_emotion(emotion) :
+     # get best alpha and beta by evidence 
     alpha, beta, degree, interactions = get_alpha_beta_evidence(emotion)
 
     X_train, Y_train, X_test, Y_test = get_train_test_data(emotion, degree, interactions)
@@ -147,14 +139,40 @@ for emotion in ["Joy","Happiness","Calmness","Relaxation","Anger","Disgust","Fea
     w_map = bayesian_linear_regression(X_train, Y_train, alpha, beta)
 
     # Print results
-    print(f"Baseline (mean is zero) score: {calc_score_baseline(X_test, Y_test, 0, beta)}")
-    print(f"Baseline (mean is train Y mean) score: {calc_score_baseline(X_test, Y_test, np.mean(Y_train), beta)}")
+    print(f"Baseline (mean is zero) score: {calc_score_baseline(X_test, Y_test, 0)}")
+    print(f"Baseline (mean is train Y mean) score: {calc_score_baseline(X_test, Y_test, np.mean(Y_train))}")
     print(f"MAP score: {calc_score(X_test, Y_test, w_map, beta)}")
-    print("----------------------------------")
-    print()
 
-    total_improvement += calc_score(X_test, Y_test, w_map, beta) - calc_score_baseline(X_test, Y_test, np.mean(Y_train), beta)
-    total_ratio += calc_score(X_test, Y_test, w_map, beta) / calc_score_baseline(X_test, Y_test, np.mean(Y_train), beta)
+    return alpha, beta, degree, interactions
 
-print(f"Average Improvement (Linear): {total_improvement/9}")
-print(f"Average Ratio: {total_ratio/9}")
+# Parameters for the param transform
+
+if __name__ == "__main__" :
+    # Test all emotions
+    total_improvement = 0
+    total_ratio = 0
+
+    for emotion in ["Joy","Happiness","Calmness","Relaxation","Anger","Disgust","Fear","Anxiousness","Sadness"] :
+        print(f"Emotion: {emotion}")
+
+        # get best alpha and beta by evidence 
+        alpha, beta, degree, interactions = get_alpha_beta_evidence(emotion)
+
+        X_train, Y_train, X_test, Y_test = get_train_test_data(emotion, degree, interactions)
+
+
+        # train model
+        w_map = bayesian_linear_regression(X_train, Y_train, alpha, beta)
+
+        # Print results
+        print(f"Baseline (mean is zero) score: {calc_score_baseline(X_test, Y_test, 0)}")
+        print(f"Baseline (mean is train Y mean) score: {calc_score_baseline(X_test, Y_test, np.mean(Y_train))}")
+        print(f"MAP score: {calc_score(X_test, Y_test, w_map, beta)}")
+        print("----------------------------------")
+        print()
+
+        total_improvement += calc_score(X_test, Y_test, w_map, beta) - calc_score_baseline(X_test, Y_test, np.mean(Y_train))
+        total_ratio += calc_score(X_test, Y_test, w_map, beta) / calc_score_baseline(X_test, Y_test, np.mean(Y_train))
+
+    print(f"Average Improvement (Linear): {total_improvement/9}")
+    print(f"Average Ratio: {total_ratio/9}")

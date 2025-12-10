@@ -14,7 +14,7 @@ trial_no_to_code = {0 : "BNS", 1: "BRZ", 2: "DST", 3: "EXR", 4: "JNG", 5: "PRS",
 
 full_data = pd.merge(gaze_data, emotions, on=['ID', 'Str_Code'], how='inner')
 
-train, test = train_test_split(full_data, test_size=0.2, random_state=42)
+train, test = train_test_split(full_data, test_size=0.2, random_state=10000)
 
 train.to_csv("../../data/processed/train.csv", index = False)
 test.to_csv("../../data/processed/test.csv", index = False)
