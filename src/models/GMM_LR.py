@@ -9,6 +9,9 @@ from scipy.stats import norm
 from sklearn.model_selection import KFold
 from map_estimator import run_map_for_emotion
 from map_estimator import bayesian_linear_regression
+from sklearn.preprocessing import StandardScaler, QuantileTransformer, MinMaxScaler
+
+CLUSTER_CUTOFF = 0.5
 
 
 # get Phi and Y for both train and test
@@ -195,7 +198,7 @@ def responsibilities_for_x(x, log_pi_K, mu_X, std_X):
 
 ##########################################################################################
 
-def run_kfcv(x_ND, Y, m, s, K, cv_K, max_iter, alpha, beta):
+def run_kfcv(x_ND, xc_ND, Y, m, s, K, cv_K, max_iter, alpha, beta):
     N, D = x_ND.shape
     kf = KFold(n_splits=cv_K, shuffle=True, random_state=42)
 
@@ -203,17 +206,21 @@ def run_kfcv(x_ND, Y, m, s, K, cv_K, max_iter, alpha, beta):
 
     for train_index, val_index in kf.split(x_ND):
         X_train, X_valid = x_ND[train_index], x_ND[val_index]
+
+        # This is the clustered (scaled) version
+        Xc_train, Xc_valid = xc_ND[train_index], xc_ND[val_index]
+
         Y_train, Y_valid = Y[train_index], Y[val_index]
 
         # Fit model on X
-        r_NK, log_pi_K, mu_KD, stddev_KD, score_train_history, loss_train_history = GMM_fit(X_train, m, s, K, max_iter)
+        r_NK, log_pi_K, mu_KD, stddev_KD, score_train_history, loss_train_history = GMM_fit(Xc_train, m, s, K, max_iter)
 
         weight_vecs = []
     
         for k in range(K):
             # Get the data points assigned to cluster k
-            cluster_data = X_train[r_NK[:, k] > 0.7]
-            cluster_Y = Y_train[r_NK[:, k] > 0.7]
+            cluster_data = X_train[r_NK[:, k] > CLUSTER_CUTOFF]
+            cluster_Y = Y_train[r_NK[:, k] > CLUSTER_CUTOFF]
             
             # Train a regression model for this cluster
             weight_vec = bayesian_linear_regression(cluster_data, cluster_Y, alpha, beta)
@@ -221,12 +228,17 @@ def run_kfcv(x_ND, Y, m, s, K, cv_K, max_iter, alpha, beta):
 
         y_preds = []
         
-        for one_X in X_valid :
-            r_NK_predict = responsibilities_for_x(one_X, log_pi_K, mu_KD, stddev_KD)
+        for i, onec_X in enumerate(Xc_valid) :
+            one_X = X_valid[i]
+            r_NK_predict = responsibilities_for_x(onec_X, log_pi_K, mu_KD, stddev_KD)
             y_pred = 0  # Initialize the prediction to zero
             for k in range(K):
                 y_pred += r_NK_predict[k] * np.dot(one_X, weight_vecs[k])  # Weighted sum of cluster predictions
 
+            if y_pred > 1 :
+                y_pred = 1
+            if y_pred < -1 :
+                y_pred = -1
             y_preds.append(y_pred)
         # print(y_preds)
 
@@ -235,7 +247,7 @@ def run_kfcv(x_ND, Y, m, s, K, cv_K, max_iter, alpha, beta):
 
     return sum(loocv_scores)/cv_K
 
-def tune_hyperparameters(x_ND, Y, cv_K, max_iter, alpha, beta, m_list = [0.5,1,2], s_list = [5,10,25, 50], k_list = [2,3,5]) :
+def tune_hyperparameters(x_ND, xc_ND, Y, cv_K, max_iter, alpha, beta, m_list = [1,2], s_list = [3,5,10,25], k_list = [2,3,5]) :
     best_m = -1
     best_s = -1
     best_k = -1
@@ -243,7 +255,7 @@ def tune_hyperparameters(x_ND, Y, cv_K, max_iter, alpha, beta, m_list = [0.5,1,2
     for m in m_list :
         for s in s_list :
             for k in k_list :
-                score = run_kfcv(x_ND, Y, m, s, k, cv_K, max_iter, alpha, beta)
+                score = run_kfcv(x_ND, xc_ND, Y, m, s, k, cv_K, max_iter, alpha, beta)
                 if score > best_score :
                     best_score = score
                     best_m = m
@@ -252,42 +264,47 @@ def tune_hyperparameters(x_ND, Y, cv_K, max_iter, alpha, beta, m_list = [0.5,1,2
 
     return best_m, best_s, best_k, best_score
 
-def train_and_eval(X_train, Y_train, X_test, Y_test, m, s, K, max_iter, alpha, beta):
+def train_and_eval(X_train, Xc_train, Y_train, X_test, Xc_test, Y_test, m, s, K, max_iter, alpha, beta):
     N, D = X_train.shape
 
     # Fit model on joint X, Y
-    r_NK, log_pi_K, mu_KD, stddev_KD, score_train_history, loss_train_history = GMM_fit(X_train, m, s, K, max_iter)
+    r_NK, log_pi_K, mu_KD, stddev_KD, score_train_history, loss_train_history = GMM_fit(Xc_train, m, s, K, max_iter)
 
 
     weight_vecs = []
     
     for k in range(K):
         # Get the data points assigned to cluster k
-        cluster_data = X_train[r_NK[:, k] > 0.5]
-        cluster_Y = Y_train[r_NK[:, k] > 0.5]
+        cluster_data = X_train[r_NK[:, k] > CLUSTER_CUTOFF]
+        cluster_Y = Y_train[r_NK[:, k] > CLUSTER_CUTOFF]
         
         # Train a regression model for this cluster
         weight_vec = bayesian_linear_regression(cluster_data, cluster_Y, alpha, beta)
         weight_vecs.append(weight_vec)
 
     y_preds = []
-    for one_X in X_test :
-
-        r_NK_predict = responsibilities_for_x(one_X, log_pi_K, mu_KD, stddev_KD)
-        print(np.argmax(r_NK_predict))
+    for i, onec_X in enumerate(Xc_test) :
+        one_X = X_test[i]
+        r_NK_predict = responsibilities_for_x(onec_X, log_pi_K, mu_KD, stddev_KD)
 
         y_pred = 0  # Initialize the prediction to zero
         for k in range(K):
             y_pred += r_NK_predict[k] * np.dot(one_X, weight_vecs[k])  # Weighted sum of cluster predictions
+        
+        if y_pred > 1 :
+            y_pred = 1
+        if y_pred < -1 :
+            y_pred = -1
 
         y_preds.append(y_pred)
 
-
-    print(f"Score: {calc_score(Y_test, np.array(y_preds), beta)}")
+    score = calc_score(Y_test, np.array(y_preds), beta)
+    print(f"Score: {score}")
 
 
     # plt.plot(np.array(score_train_history))
     # plt.show() 
+    return score
 
 
 def calc_score(y_true, y_pred, beta = 10) :
@@ -310,6 +327,8 @@ def calc_score(y_true, y_pred, beta = 10) :
 
 #     return X_train_normalized, X_test_normalized
 
+score_total = 0
+
 for emotion in ["Joy","Happiness","Calmness","Relaxation","Anger","Disgust","Fear","Anxiousness","Sadness"] :
 
     print(f"Emotion: {emotion}")
@@ -318,15 +337,28 @@ for emotion in ["Joy","Happiness","Calmness","Relaxation","Anger","Disgust","Fea
 
     X_train, y_train, X_test, y_test = get_train_test_data(emotion, degree = 2, interact=True)
 
+    X_train2, y_train2, X_test2, y_test2 = get_train_test_data(emotion, degree = 1, interact=False)
+
+
+    scaler = StandardScaler() 
+
+    X_train_for_cluster = scaler.fit_transform(X_train2)
+    X_test_for_cluster  = scaler.transform(X_test2)
+
+    # print(X_train)
+    # print(X_test)
+
     # print(run_loocv(X_train, y_train, 2, 10, 5, 4))
     # print(run_kfcv(X_train, y_train, 2, 10, 5, 5, 4))
 
-    best_m, best_s, best_k, best_score = tune_hyperparameters(X_train, y_train, 5, 5, alpha, beta)
+    best_m, best_s, best_k, best_score = tune_hyperparameters(X_train, X_train_for_cluster, y_train, 5, 6, alpha, beta)
 
     print(f"Best m: {best_m}")
     print(f"Best s: {best_s}")
     print(f"Best k: {best_k}")
     print(f"kfcv score {best_score}")
 
-    train_and_eval(X_train, y_train, X_test, y_test, best_m, best_s, best_k, 5, alpha, beta)
+    score_total += train_and_eval(X_train, X_train_for_cluster, y_train, X_test, X_test_for_cluster, y_test, best_m, best_s, best_k, 6, alpha, beta)
     print()
+
+print(f"Average score: {score_total/9}")
